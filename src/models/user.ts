@@ -1,5 +1,11 @@
 import { Schema, Model, model, Document } from "mongoose";
+import { PasswordManager } from "../utils/password-manager";
 
+enum UserType {
+  ADMIN = "admin",
+  VIEWER = "viewer",
+  SUPERVISOR = "supervisor",
+}
 /**
  * Model attrs during creation.
  */
@@ -8,7 +14,7 @@ interface Attrs {
   email: String;
   phone: String;
   photo?: String;
-  user_type?: String;
+  user_type?: UserType;
   password: String;
 }
 
@@ -23,7 +29,7 @@ interface UserDoc extends Document {
   phone: string;
   photo?: string;
   password: string;
-  user_type?: string;
+  user_type?: UserType;
   created_at?: Date;
   password_changed?: boolean;
   password_change_User?: string;
@@ -40,8 +46,14 @@ const userSchema = new Schema(
     country: { type: String },
     phone: { type: String },
     photo: { type: String },
-    password: { type: String },
-    user_type: { type: String },
+    password: { type: String, select: false },
+    user_type: {
+      type: String,
+      enum: {
+        values: Object.values(UserType),
+        message: `User type should on be ${Object.values(UserType).join(", ")}`,
+      },
+    },
     password_changed: { type: Boolean },
     password_change_User: { type: String },
     is_admin: { type: Boolean },
@@ -65,9 +77,23 @@ const userSchema = new Schema(
   }
 );
 
+// method
 userSchema.statics.build = (attrs: Attrs) => {
   return new User(attrs);
 };
 
+// middleware
+userSchema.pre<UserDoc>(/^find/, function (next) {
+  next();
+});
+
+userSchema.pre("save", async function (done) {
+  if (this.isModified("password")) {
+    const hashed = await PasswordManager.toHash(this.get("password"));
+    this.set("password", hashed);
+  }
+  done();
+});
+
 const User = model<UserDoc, UserModel>("User", userSchema);
-export { User };
+export { User, UserDoc, UserType };
